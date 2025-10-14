@@ -12,8 +12,10 @@ A comprehensive Flask-based web application that analyzes YouTube videos to iden
 - 🎯 **Niche Identification**: Clusters videos by keywords and identifies low-competition opportunities
 - 📈 **Engagement Metrics**: Calculates engagement percentage, view velocity, and competition scores
 - 🔍 **Related Videos**: Discovers top competitor videos for each analyzed video
+- 🏆 **Channel-Wide Analysis**: Analyzes ALL videos from each discovered channel (up to 50 per channel)
+- 🎭 **Niche Competitor Analysis**: Identifies top-performing competitors in each niche with detailed stats
 - 💾 **API Quota Preservation**: Caches API responses locally to minimize quota usage
-- 📥 **CSV Export**: Download complete analysis results as CSV
+- 📥 **Multiple CSV Exports**: Download seed videos, niche analysis, or all channel videos separately
 - 🎨 **Interactive UI**: Clean dashboard with DataTables, sorting, search, and visual indicators
 
 ## Project Structure
@@ -75,8 +77,18 @@ The analysis displays:
 - **Blue rows**: Low competition niches (<40 competition score)
 - **Purple gradient**: Videos with both high engagement AND low competition
 
-### 3. Export Data
-Click "Export CSV" to download the complete analysis as a CSV file.
+### 3. View Niche Competitor Analysis
+After analysis completes, scroll down to see:
+- Breakdown of videos by niche
+- Top 5 performing competitors in each niche
+- Channel stats including avg engagement and competition scores
+- Top 3 videos from each competitor channel
+
+### 4. Export Data
+Click "Export Data ▼" and choose from:
+- **Seed Videos CSV**: Original analyzed videos
+- **Niche Analysis CSV**: Competitor breakdown by niche
+- **All Videos CSV**: All videos from all discovered channels
 
 ## Metrics Explained
 
@@ -126,7 +138,13 @@ Analyzes custom video URLs
 Fetches top 5-10 related videos for a specific video
 
 ### `GET /export`
-Downloads analysis results as CSV file
+Downloads seed video analysis results as CSV file
+
+### `GET /export/niches`
+Downloads niche competitor analysis as CSV file
+
+### `GET /export/all_videos`
+Downloads all channel videos analysis as CSV file
 
 ## Caching System
 API responses are cached in `data/cache.json` with the following structure:
@@ -189,7 +207,15 @@ https://www.youtube.com/watch?v=VIDEO_ID_2
 - Verify videos are public and accessible
 
 ## Recent Changes
-- **Oct 14, 2025**: Initial implementation complete
+- **Oct 14, 2025 (v2.0)**: Channel-wide analysis and niche competitor feature
+  - Added channel-wide video analysis (up to 50 videos per channel)
+  - Implemented niche competitor identification and ranking
+  - Created interactive niche breakdown UI with top performers
+  - Added multiple CSV export options (seed videos, niche analysis, all videos)
+  - Fixed related videos search using keyword-based approach
+  - Enhanced caching for channel video lists
+
+- **Oct 14, 2025 (v1.0)**: Initial implementation
   - YouTube OAuth integration via Replit connector
   - Full analytics pipeline with caching
   - Interactive dashboard with DataTables

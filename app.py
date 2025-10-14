@@ -195,6 +195,44 @@ def get_channel_stats(youtube, channel_ids):
     
     return results
 
+def get_all_channel_videos(youtube, channel_id, max_videos=50):
+    """Fetch all videos from a channel (up to max_videos)"""
+    cache = load_cache()
+    cache_key = f'channel_videos_{channel_id}_{max_videos}'
+    
+    if cache_key in cache.get('channel_videos', {}):
+        return cache['channel_videos'][cache_key]
+    
+    video_ids = []
+    try:
+        next_page_token = None
+        while len(video_ids) < max_videos:
+            response = youtube.search().list(
+                part='id',
+                channelId=channel_id,
+                type='video',
+                order='date',
+                maxResults=min(50, max_videos - len(video_ids)),
+                pageToken=next_page_token
+            ).execute()
+            
+            for item in response.get('items', []):
+                video_ids.append(item['id']['videoId'])
+            
+            next_page_token = response.get('nextPageToken')
+            if not next_page_token:
+                break
+        
+        if 'channel_videos' not in cache:
+            cache['channel_videos'] = {}
+        cache['channel_videos'][cache_key] = video_ids
+        save_cache(cache)
+        
+        return video_ids
+    except Exception as e:
+        print(f"Error fetching channel videos: {e}")
+        return []
+
 def parse_duration(duration):
     """Parse ISO 8601 duration to minutes"""
     pattern = r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?'
@@ -219,7 +257,7 @@ def extract_keywords(titles, top_n=3):
     return [word for word, count in counter.most_common(top_n)]
 
 def get_related_videos(youtube, video_id, max_results=5):
-    """Fetch related videos for a given video"""
+    """Fetch related videos using channel-based search as fallback"""
     cache = load_cache()
     cache_key = f'related_{video_id}_{max_results}'
     
@@ -227,20 +265,34 @@ def get_related_videos(youtube, video_id, max_results=5):
         return cache['related'][cache_key]
     
     try:
+        video_info = cache.get('videos', {}).get(video_id)
+        if not video_info:
+            video_data = get_video_details(youtube, [video_id])
+            if video_data:
+                video_info = video_data[0]
+        
+        if not video_info:
+            return []
+        
+        keywords = extract_keywords([video_info['title']], top_n=3)
+        search_query = ' '.join(keywords[:2]) if len(keywords) >= 2 else keywords[0] if keywords else video_info['title'][:50]
+        
         response = youtube.search().list(
             part='snippet',
-            relatedToVideoId=video_id,
+            q=search_query,
             type='video',
-            maxResults=max_results
+            maxResults=max_results + 5,
+            order='viewCount'
         ).execute()
         
         related = []
         for item in response.get('items', []):
-            related.append({
-                'video_id': item['id']['videoId'],
-                'title': item['snippet']['title'],
-                'channel_title': item['snippet']['channelTitle']
-            })
+            if item['id']['videoId'] != video_id and len(related) < max_results:
+                related.append({
+                    'video_id': item['id']['videoId'],
+                    'title': item['snippet']['title'],
+                    'channel_title': item['snippet']['channelTitle']
+                })
         
         if 'related' not in cache:
             cache['related'] = {}
@@ -282,6 +334,7 @@ def calculate_metrics(video_data, channel_stats):
             'video_id': video['video_id'],
             'title': video['title'],
             'channel': video['channel_title'],
+            'channel_id': video['channel_id'],
             'channel_subs': subscriber_count,
             'views': video['views'],
             'likes': video['likes'],
@@ -306,6 +359,73 @@ def cluster_niches(results):
     
     return results
 
+def identify_niche_competitors(all_results):
+    """Identify top-performing competitors in each niche"""
+    niche_data = {}
+    
+    for result in all_results:
+        niche = result.get('niche', 'general')
+        if niche not in niche_data:
+            niche_data[niche] = {
+                'channels': {},
+                'total_videos': 0,
+                'avg_engagement': 0,
+                'avg_competition': 0
+            }
+        
+        channel = result['channel']
+        if channel not in niche_data[niche]['channels']:
+            niche_data[niche]['channels'][channel] = {
+                'channel': channel,
+                'channel_id': result['channel_id'],
+                'channel_subs': result['channel_subs'],
+                'video_count': 0,
+                'total_views': 0,
+                'total_engagement': 0,
+                'avg_engagement': 0,
+                'competition_score': result['competition_score'],
+                'videos': []
+            }
+        
+        channel_data = niche_data[niche]['channels'][channel]
+        channel_data['video_count'] += 1
+        channel_data['total_views'] += result['views']
+        channel_data['total_engagement'] += result['engagement_pct']
+        channel_data['videos'].append({
+            'title': result['title'],
+            'video_id': result['video_id'],
+            'views': result['views'],
+            'engagement_pct': result['engagement_pct']
+        })
+        
+        niche_data[niche]['total_videos'] += 1
+    
+    for niche, data in niche_data.items():
+        engagement_sum = 0
+        competition_sum = 0
+        
+        for channel, channel_data in data['channels'].items():
+            channel_data['avg_engagement'] = channel_data['total_engagement'] / channel_data['video_count']
+            engagement_sum += channel_data['avg_engagement']
+            competition_sum += channel_data['competition_score']
+            
+            channel_data['videos'] = sorted(
+                channel_data['videos'], 
+                key=lambda x: x['views'], 
+                reverse=True
+            )[:5]
+        
+        data['avg_engagement'] = engagement_sum / len(data['channels']) if data['channels'] else 0
+        data['avg_competition'] = competition_sum / len(data['channels']) if data['channels'] else 0
+        
+        data['top_competitors'] = sorted(
+            data['channels'].values(),
+            key=lambda x: (x['avg_engagement'], -x['competition_score']),
+            reverse=True
+        )[:10]
+    
+    return niche_data
+
 @app.route('/')
 def index():
     """Render the main dashboard"""
@@ -313,7 +433,7 @@ def index():
 
 @app.route('/analyze', methods=['GET', 'POST'])
 def analyze():
-    """Analyze videos and return results"""
+    """Analyze videos and return results with channel-wide analysis"""
     try:
         if request.method == 'POST':
             urls = (request.json or {}).get('urls', [])
@@ -335,25 +455,64 @@ def analyze():
         channel_stats = get_channel_stats(youtube, channel_ids)
         
         results = calculate_metrics(video_data, channel_stats)
-        
         results = [r for r in results if 10 <= r['duration_min'] <= 30]
-        
         results = cluster_niches(results)
         
         for result in results:
             related = get_related_videos(youtube, result['video_id'], max_results=5)
             result['related_videos'] = related
         
-        df = pd.DataFrame(results)
-        df.to_csv('data/results.csv', index=False)
+        all_channel_videos = []
+        print(f"Fetching all videos from {len(channel_ids)} channels...")
+        
+        for channel_id in channel_ids:
+            channel_video_ids = get_all_channel_videos(youtube, channel_id, max_videos=50)
+            if channel_video_ids:
+                channel_video_data = get_video_details(youtube, channel_video_ids)
+                channel_results = calculate_metrics(channel_video_data, channel_stats)
+                channel_results = [r for r in channel_results if 10 <= r['duration_min'] <= 30]
+                channel_results = cluster_niches(channel_results)
+                all_channel_videos.extend(channel_results)
+        
+        print(f"Analyzed {len(all_channel_videos)} total videos from all channels")
+        
+        niche_competitors = identify_niche_competitors(all_channel_videos)
+        
+        all_videos_df = pd.DataFrame(all_channel_videos) if all_channel_videos else pd.DataFrame()
+        if not all_videos_df.empty:
+            all_videos_df.to_csv('data/all_channel_videos.csv', index=False)
+        
+        niche_summary = []
+        for niche, data in niche_competitors.items():
+            niche_summary.append({
+                'niche': niche,
+                'total_videos': data['total_videos'],
+                'total_channels': len(data['channels']),
+                'avg_engagement': round(data['avg_engagement'], 2),
+                'avg_competition': round(data['avg_competition'], 2),
+                'top_competitors': data['top_competitors'][:5]
+            })
+        
+        niche_summary = sorted(niche_summary, key=lambda x: (-x['avg_engagement'], x['avg_competition']))
+        
+        niche_df = pd.DataFrame(niche_summary)
+        if not niche_df.empty:
+            niche_df.to_csv('data/niche_competitors.csv', index=False)
+        
+        seed_df = pd.DataFrame(results)
+        seed_df.to_csv('data/results.csv', index=False)
         
         return jsonify({
             'success': True,
             'data': results,
-            'count': len(results)
+            'count': len(results),
+            'niche_analysis': niche_summary,
+            'total_channel_videos': len(all_channel_videos)
         })
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/related/<video_id>')
@@ -371,6 +530,22 @@ def export_csv():
     """Download results as CSV"""
     try:
         return send_file('data/results.csv', as_attachment=True, download_name='youtube_analysis.csv')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 404
+
+@app.route('/export/niches')
+def export_niches_csv():
+    """Download niche competitor analysis as CSV"""
+    try:
+        return send_file('data/niche_competitors.csv', as_attachment=True, download_name='niche_competitors.csv')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 404
+
+@app.route('/export/all_videos')
+def export_all_videos_csv():
+    """Download all channel videos as CSV"""
+    try:
+        return send_file('data/all_channel_videos.csv', as_attachment=True, download_name='all_channel_videos.csv')
     except Exception as e:
         return jsonify({'error': str(e)}), 404
 
