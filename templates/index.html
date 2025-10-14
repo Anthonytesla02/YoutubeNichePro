@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Niche Analysis Dashboard</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto px-4 py-8">
+        <div class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">YouTube Niche Analysis Dashboard</h1>
+            <p class="text-gray-600">Analyze YouTube videos to identify high-engagement, low-competition niches</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Video URLs (one per line)</label>
+                <textarea 
+                    id="urlInput" 
+                    rows="6" 
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Paste YouTube video URLs here, one per line&#10;Or leave empty to analyze default seed videos"></textarea>
+            </div>
+            
+            <div class="flex gap-4">
+                <button 
+                    id="analyzeBtn" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-md transition">
+                    Run Analysis
+                </button>
+                <button 
+                    id="exportBtn" 
+                    class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
+                    Export CSV
+                </button>
+                <div id="loadingIndicator" class="hidden flex items-center">
+                    <svg class="animate-spin h-5 w-5 mr-2 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-gray-600">Analyzing videos...</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="statsCards" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 hidden">
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-sm text-gray-600">Total Videos</div>
+                <div id="totalVideos" class="text-2xl font-bold text-gray-800">0</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-sm text-gray-600">High Engagement</div>
+                <div id="highEngagement" class="text-2xl font-bold text-green-600">0</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-sm text-gray-600">Low Competition</div>
+                <div id="lowCompetition" class="text-2xl font-bold text-blue-600">0</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-sm text-gray-600">Avg Engagement</div>
+                <div id="avgEngagement" class="text-2xl font-bold text-gray-800">0%</div>
+            </div>
+        </div>
+
+        <div id="errorMessage" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 hidden">
+            <strong>Error:</strong> <span id="errorText"></span>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Analysis Results</h2>
+            <div class="overflow-x-auto">
+                <table id="resultsTable" class="display" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Channel</th>
+                            <th>Subs</th>
+                            <th>Views</th>
+                            <th>Likes</th>
+                            <th>Comments</th>
+                            <th>Duration (min)</th>
+                            <th>Upload Date</th>
+                            <th>Days Old</th>
+                            <th>View Velocity</th>
+                            <th>Engagement %</th>
+                            <th>Competition</th>
+                            <th>Main Keyword</th>
+                            <th>Niche</th>
+                            <th>Related Videos</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 class="font-semibold text-blue-800 mb-2">Legend:</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                <div><span class="inline-block w-4 h-4 bg-green-100 border border-green-400 mr-2"></span>High Engagement (>3%)</div>
+                <div><span class="inline-block w-4 h-4 bg-blue-100 border border-blue-400 mr-2"></span>Low Competition (<40)</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let dataTable;
+
+        $('#analyzeBtn').click(function() {
+            const urls = $('#urlInput').val().trim();
+            const urlList = urls ? urls.split('\n').filter(u => u.trim()) : [];
+            
+            $('#loadingIndicator').removeClass('hidden');
+            $('#analyzeBtn').prop('disabled', true);
+            $('#errorMessage').addClass('hidden');
+            
+            const requestData = urlList.length > 0 ? { urls: urlList } : {};
+            const method = urlList.length > 0 ? 'POST' : 'GET';
+            
+            $.ajax({
+                url: '/analyze',
+                method: method,
+                contentType: 'application/json',
+                data: method === 'POST' ? JSON.stringify(requestData) : undefined,
+                success: function(response) {
+                    if (response.success) {
+                        displayResults(response.data);
+                        updateStats(response.data);
+                        $('#exportBtn').prop('disabled', false);
+                    }
+                },
+                error: function(xhr) {
+                    const error = xhr.responseJSON?.error || 'An error occurred';
+                    $('#errorText').text(error);
+                    $('#errorMessage').removeClass('hidden');
+                },
+                complete: function() {
+                    $('#loadingIndicator').addClass('hidden');
+                    $('#analyzeBtn').prop('disabled', false);
+                }
+            });
+        });
+
+        $('#exportBtn').click(function() {
+            window.location.href = '/export';
+        });
+
+        function displayResults(data) {
+            if (dataTable) {
+                dataTable.destroy();
+            }
+
+            const tableBody = $('#resultsTable tbody');
+            tableBody.empty();
+
+            data.forEach(function(row) {
+                const relatedVideos = row.related_videos.map(v => 
+                    `<div class="text-xs mb-1">• ${v.title}</div>`
+                ).join('');
+
+                const tr = $('<tr></tr>');
+                
+                if (row.engagement_pct > 3) {
+                    tr.addClass('high-engagement');
+                }
+                if (row.competition_score < 40) {
+                    tr.addClass('low-competition');
+                }
+
+                tr.append(`
+                    <td><a href="https://youtube.com/watch?v=${row.video_id}" target="_blank" class="text-blue-600 hover:underline">${row.title}</a></td>
+                    <td>${row.channel}</td>
+                    <td>${row.channel_subs.toLocaleString()}</td>
+                    <td>${row.views.toLocaleString()}</td>
+                    <td>${row.likes.toLocaleString()}</td>
+                    <td>${row.comments.toLocaleString()}</td>
+                    <td>${row.duration_min}</td>
+                    <td>${row.upload_date}</td>
+                    <td>${row.days_since_upload}</td>
+                    <td>${row.view_velocity.toLocaleString()}</td>
+                    <td>${row.engagement_pct}%</td>
+                    <td>${row.competition_score}</td>
+                    <td>${row.main_keyword}</td>
+                    <td>${row.niche}</td>
+                    <td><div class="max-w-xs">${relatedVideos || 'None'}</div></td>
+                `);
+
+                tableBody.append(tr);
+            });
+
+            dataTable = $('#resultsTable').DataTable({
+                pageLength: 25,
+                order: [[10, 'desc']],
+                columnDefs: [
+                    { type: 'num', targets: [2, 3, 4, 5, 6, 8, 9, 10, 11] }
+                ]
+            });
+        }
+
+        function updateStats(data) {
+            $('#statsCards').removeClass('hidden');
+            $('#totalVideos').text(data.length);
+            
+            const highEng = data.filter(d => d.engagement_pct > 3).length;
+            $('#highEngagement').text(highEng);
+            
+            const lowComp = data.filter(d => d.competition_score < 40).length;
+            $('#lowCompetition').text(lowComp);
+            
+            const avgEng = data.reduce((sum, d) => sum + d.engagement_pct, 0) / data.length;
+            $('#avgEngagement').text(avgEng.toFixed(2) + '%');
+        }
+    </script>
+</body>
+</html>
