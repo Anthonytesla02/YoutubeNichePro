@@ -1,0 +1,100 @@
+You are to build a complete, high-functioning YouTube niche-analysis application using Python (Flask + Pandas + YouTube Data API v3).
+
+### Goal:
+Create a web-based dashboard where I can input or upload a list of YouTube video URLs (initially use the 13 links below), and the app will:
+1. Fetch detailed stats for each video (title, channel, views, likes, comments, upload date, duration, etc.).
+2. Calculate engagement and competition metrics to identify low-competition but high-engagement niches.
+3. Fetch top-performing related videos and competitor channels for each niche.
+4. Display everything in a clean, sortable table (DataTable style) and exportable as CSV.
+
+---
+
+### Input Data (seed video URLs):
+1. https://www.youtube.com/watch?v=41i2XIV8mCI
+2. https://www.youtube.com/watch?v=FFUajdEGf7c
+3. https://www.youtube.com/watch?v=gtDKKJq9u30
+4. https://www.youtube.com/watch?v=R5eJmeZ8_qE
+5. https://www.youtube.com/watch?v=44C00j-5Mhk
+6. https://www.youtube.com/watch?v=-0C9rt84MdM
+7. https://www.youtube.com/watch?v=Fh3Chax2Sw4
+8. https://www.youtube.com/watch?v=Y6PENqQpjII
+9. https://www.youtube.com/watch?v=YHr83UsFzec
+10. https://www.youtube.com/watch?v=qqyM54CNSsY
+11. https://www.youtube.com/watch?v=lczVMeA4gAQ
+12. https://www.youtube.com/watch?v=ilzOgUDRQpk
+13. https://www.youtube.com/watch?v=qTk-B-j6TKE
+
+---
+
+### Features and Requirements
+
+**Backend (Python / Flask):**
+- Use the YouTube Data API v3 (user provides API key via `.env`).
+- Endpoints:
+  - `/analyze` – fetches and processes the above videos and returns JSON data.
+  - `/related/<video_id>` – fetches top 5–10 related videos for a given seed video.
+- Functions:
+  - `get_video_details(video_ids)` → returns title, views, likes, comments, duration, upload_date, channel_id, channel_title.
+  - `get_channel_stats(channel_ids)` → returns subscriber counts.
+  - `calculate_metrics()` → computes:
+      - Duration in minutes
+      - Days since upload
+      - View velocity (views / days)
+      - Engagement % = (likes + comments) / views * 100
+      - Competition score = weighted average of (avg top-channel subs + recent upload frequency + number of related results)
+  - Cluster or group videos into niches based on main keywords from titles/tags (e.g. using TF-IDF or simple keyword frequency).
+
+**Frontend (Flask + HTML + JS):**
+- Simple clean dashboard (Bootstrap or Tailwind).
+- Upload or paste URLs in a text box.
+- “Run Analysis” button triggers backend API.
+- Displays results in an interactive DataTable with columns:
+
+| Video Title | Channel | Channel Subs | Views | Likes | Comments | Duration (min) | Upload Date | Days Since Upload | View Velocity | Engagement % | Competition Score | Main Keyword | Best Related Videos | Niche |
+
+- Include sorting, search, and CSV export.
+
+**Metrics / Logic:**
+- Filter videos to only 10–30 minutes duration.
+- Highlight high-engagement videos (Engagement% > 3%) in green.
+- Highlight low-competition niches (Competition < 40) in blue.
+- Show top 3 related competitor videos per seed.
+
+**Extra Functionality:**
+- Cache API responses locally (e.g., in `data/cache.json`) to save quota.
+- Export results as `results.csv`.
+
+---
+
+### Implementation Notes:
+- Use `google-api-python-client`, `pandas`, `flask`, `requests`, and optionally `jinja2` templates.
+- Store the provided 13 URLs in a `seeds.txt` file.
+- Read API key from `.env` using `python-dotenv`.
+- Output all computed data in a single DataFrame and serve to frontend as JSON.
+- Keep the code clean, modular, and commented.
+
+---
+
+### Deliverables:
+1. Complete Flask project structure:
+   - `app.py`
+   - `templates/index.html`
+   - `static/style.css` (basic)
+   - `requirements.txt`
+   - `.env.example`
+   - `seeds.txt`
+2. Working demo endpoint `/analyze` that runs the analysis on the given 13 URLs.
+3. HTML dashboard showing results in an interactive sortable table.
+4. Optional: download CSV button for exporting results.
+
+---
+
+### Tech Summary:
+- Language: Python 3
+- Framework: Flask
+- Libraries: google-api-python-client, pandas, python-dateutil, requests, flask, python-dotenv
+- Frontend: HTML + Tailwind or Bootstrap + JS DataTables
+
+---
+
+Build this full application and make sure it works end-to-end with the YouTube API v3. Use the provided 13 URLs as the test dataset.
