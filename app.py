@@ -3,6 +3,7 @@ import json
 import re
 from datetime import datetime, timedelta, timezone
 from collections import Counter
+from typing import Any, Optional
 import pandas as pd
 from flask import Flask, render_template, jsonify, request, send_file
 from googleapiclient.discovery import build
@@ -17,7 +18,7 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
 
 CACHE_FILE = 'data/cache.json'
 
-connection_settings_cache = {'data': None, 'expires_at': None}
+connection_settings_cache: dict[str, Any] = {'data': None, 'expires_at': None}
 
 def get_replit_connector_headers():
     """Get headers for Replit connector API calls"""
