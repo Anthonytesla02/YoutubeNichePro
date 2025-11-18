@@ -426,10 +426,221 @@ def identify_niche_competitors(all_results):
     
     return niche_data
 
+def automated_search(youtube, keyword, video_duration='short', max_results=50):
+    """Search YouTube for videos by keyword with duration filter"""
+    cache = load_cache()
+    cache_key = f'search_{keyword}_{video_duration}_{max_results}'
+    
+    if cache_key in cache.get('searches', {}):
+        return cache['searches'][cache_key]
+    
+    try:
+        video_ids = []
+        next_page_token = None
+        
+        while len(video_ids) < max_results:
+            response = youtube.search().list(
+                part='id',
+                q=keyword,
+                type='video',
+                videoDuration=video_duration,
+                maxResults=min(50, max_results - len(video_ids)),
+                order='viewCount',
+                pageToken=next_page_token
+            ).execute()
+            
+            for item in response.get('items', []):
+                if 'videoId' in item['id']:
+                    video_ids.append(item['id']['videoId'])
+            
+            next_page_token = response.get('nextPageToken')
+            if not next_page_token or len(video_ids) >= max_results:
+                break
+        
+        if 'searches' not in cache:
+            cache['searches'] = {}
+        cache['searches'][cache_key] = video_ids
+        save_cache(cache)
+        
+        return video_ids
+    except Exception as e:
+        print(f"Error in automated search: {e}")
+        return []
+
+def filter_by_channel_age(channel_data, max_age_days=None):
+    """Filter channels by age"""
+    if max_age_days is None:
+        return True
+    
+    published_at = channel_data.get('published_at')
+    if not published_at:
+        return True
+    
+    try:
+        channel_date = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
+        days_old = (datetime.now(channel_date.tzinfo) - channel_date).days
+        return days_old <= max_age_days
+    except:
+        return True
+
+def get_channel_details(youtube, channel_ids):
+    """Fetch channel details including creation date"""
+    cache = load_cache()
+    results = {}
+    uncached_ids = []
+    
+    for channel_id in channel_ids:
+        cache_key = f'channel_details_{channel_id}'
+        if cache_key in cache.get('channel_details', {}):
+            results[channel_id] = cache['channel_details'][cache_key]
+        else:
+            uncached_ids.append(channel_id)
+    
+    if uncached_ids:
+        try:
+            response = youtube.channels().list(
+                part='snippet,statistics',
+                id=','.join(uncached_ids)
+            ).execute()
+            
+            for item in response.get('items', []):
+                channel_data = {
+                    'channel_id': item['id'],
+                    'title': item['snippet']['title'],
+                    'published_at': item['snippet']['publishedAt'],
+                    'subscriber_count': int(item['statistics'].get('subscriberCount', 0)),
+                    'video_count': int(item['statistics'].get('videoCount', 0)),
+                    'view_count': int(item['statistics'].get('viewCount', 0))
+                }
+                results[item['id']] = channel_data
+                
+                if 'channel_details' not in cache:
+                    cache['channel_details'] = {}
+                cache['channel_details'][f'channel_details_{item["id"]}'] = channel_data
+            
+            save_cache(cache)
+        except Exception as e:
+            print(f"Error fetching channel details: {e}")
+    
+    return results
+
+def calculate_potential_score(video_data, channel_data):
+    """Calculate potential score for videos (high views, low subs = high potential)"""
+    views = video_data.get('views', 0)
+    subs = channel_data.get('subscriber_count', 1)
+    
+    if subs == 0:
+        subs = 1
+    
+    view_to_sub_ratio = views / subs if subs > 0 else 0
+    
+    base_score = min(view_to_sub_ratio * 100, 100)
+    
+    if subs < 10000:
+        base_score *= 1.5
+    elif subs < 50000:
+        base_score *= 1.2
+    
+    return min(base_score, 100)
+
 @app.route('/')
 def index():
     """Render the main dashboard"""
     return render_template('index.html')
+
+@app.route('/search', methods=['POST'])
+def search_niche():
+    """Automated search for videos by keyword with filters"""
+    try:
+        data = request.json or {}
+        keyword = data.get('keyword', '').strip()
+        
+        if not keyword:
+            return jsonify({'error': 'Keyword is required'}), 400
+        
+        video_duration = data.get('video_duration', 'short')
+        min_subs = data.get('min_subs', 0)
+        max_subs = data.get('max_subs', 1000000)
+        min_views = data.get('min_views', 0)
+        max_views = data.get('max_views', 999999999)
+        max_channel_age_days = data.get('max_channel_age_days')
+        max_results = min(data.get('max_results', 50), 100)
+        
+        youtube = get_youtube_client()
+        
+        print(f"Searching for '{keyword}' with duration={video_duration}, max_results={max_results}")
+        video_ids = automated_search(youtube, keyword, video_duration, max_results)
+        
+        if not video_ids:
+            return jsonify({'error': 'No videos found for this search'}), 404
+        
+        print(f"Found {len(video_ids)} videos, fetching details...")
+        video_data = get_video_details(youtube, video_ids)
+        
+        channel_ids = list(set([v['channel_id'] for v in video_data]))
+        print(f"Fetching details for {len(channel_ids)} channels...")
+        channel_details = get_channel_details(youtube, channel_ids)
+        
+        filtered_results = []
+        for video in video_data:
+            channel_id = video['channel_id']
+            channel_info = channel_details.get(channel_id, {})
+            
+            subs = channel_info.get('subscriber_count', 0)
+            views = video.get('views', 0)
+            
+            if not (min_subs <= subs <= max_subs):
+                continue
+            if not (min_views <= views <= max_views):
+                continue
+            
+            if max_channel_age_days and not filter_by_channel_age(channel_info, max_channel_age_days):
+                continue
+            
+            filtered_results.append({
+                'video': video,
+                'channel': channel_info
+            })
+        
+        print(f"After filtering: {len(filtered_results)} videos match criteria")
+        
+        if not filtered_results:
+            return jsonify({'error': 'No videos match your filter criteria'}), 404
+        
+        channel_stats = {ch_id: {'subscriber_count': ch['subscriber_count'], 'video_count': ch['video_count']} 
+                        for ch_id, ch in channel_details.items()}
+        
+        results = calculate_metrics([item['video'] for item in filtered_results], channel_stats)
+        results = cluster_niches(results)
+        
+        for i, result in enumerate(results):
+            channel_info = filtered_results[i]['channel']
+            result['potential_score'] = round(calculate_potential_score(filtered_results[i]['video'], channel_info), 2)
+            result['channel_age_days'] = (datetime.now(datetime.fromisoformat(channel_info['published_at'].replace('Z', '+00:00')).tzinfo) - 
+                                         datetime.fromisoformat(channel_info['published_at'].replace('Z', '+00:00'))).days if channel_info.get('published_at') else None
+        
+        results = sorted(results, key=lambda x: x['potential_score'], reverse=True)
+        
+        seed_df = pd.DataFrame(results)
+        seed_df.to_csv('data/search_results.csv', index=False)
+        
+        return jsonify({
+            'success': True,
+            'data': results,
+            'count': len(results),
+            'search_params': {
+                'keyword': keyword,
+                'video_duration': video_duration,
+                'subs_range': f'{min_subs:,} - {max_subs:,}',
+                'views_range': f'{min_views:,} - {max_views:,}',
+                'max_channel_age_days': max_channel_age_days
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/analyze', methods=['GET', 'POST'])
 def analyze():

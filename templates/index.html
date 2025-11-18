@@ -20,20 +20,99 @@
         </div>
 
         <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Video URLs (one per line)</label>
-                <textarea 
-                    id="urlInput" 
-                    rows="6" 
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Paste YouTube video URLs here, one per line&#10;Or leave empty to analyze default seed videos"></textarea>
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Automated Niche Discovery</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Keyword or Niche *</label>
+                    <input 
+                        type="text" 
+                        id="keywordInput" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., cooking tips, fitness, tech reviews">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Video Length</label>
+                    <select 
+                        id="videoDuration" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="short">Shorts (< 4 minutes)</option>
+                        <option value="medium">Medium (4-20 minutes)</option>
+                        <option value="long">Long (> 20 minutes)</option>
+                        <option value="any">Any Duration</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Subscriber Range</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input 
+                            type="number" 
+                            id="minSubs" 
+                            class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Min (0)"
+                            value="0">
+                        <input 
+                            type="number" 
+                            id="maxSubs" 
+                            class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Max (100k)"
+                            value="100000">
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Find smaller channels with high potential</p>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">View Range</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input 
+                            type="number" 
+                            id="minViews" 
+                            class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Min (0)"
+                            value="0">
+                        <input 
+                            type="number" 
+                            id="maxViews" 
+                            class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Max"
+                            value="999999999">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Max Channel Age (Days)</label>
+                    <input 
+                        type="number" 
+                        id="maxChannelAge" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Leave empty for any age">
+                    <p class="text-xs text-gray-500 mt-1">Find newer channels (e.g., 365 for 1 year old)</p>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Max Results</label>
+                    <select 
+                        id="maxResults" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="25">25 videos</option>
+                        <option value="50" selected>50 videos</option>
+                        <option value="75">75 videos</option>
+                        <option value="100">100 videos</option>
+                    </select>
+                </div>
             </div>
             
             <div class="flex gap-4">
                 <button 
-                    id="analyzeBtn" 
+                    id="searchBtn" 
                     class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-md transition">
-                    Run Analysis
+                    🔍 Search for High-Potential Videos
                 </button>
                 <div class="relative">
                     <button 
@@ -43,9 +122,7 @@
                         Export Data ▼
                     </button>
                     <div id="exportMenu" class="hidden absolute top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 min-w-[200px]">
-                        <button onclick="window.location.href='/export'" class="block w-full text-left px-4 py-2 hover:bg-gray-100">Seed Videos CSV</button>
-                        <button onclick="window.location.href='/export/niches'" class="block w-full text-left px-4 py-2 hover:bg-gray-100">Niche Analysis CSV</button>
-                        <button onclick="window.location.href='/export/all_videos'" class="block w-full text-left px-4 py-2 hover:bg-gray-100">All Videos CSV</button>
+                        <button onclick="window.location.href='/export'" class="block w-full text-left px-4 py-2 hover:bg-gray-100">Search Results CSV</button>
                     </div>
                 </div>
                 <div id="loadingIndicator" class="hidden flex items-center">
@@ -53,8 +130,13 @@
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span class="text-gray-600">Analyzing videos...</span>
+                    <span class="text-gray-600">Searching YouTube...</span>
                 </div>
+            </div>
+            
+            <div id="searchParams" class="hidden mt-4 p-3 bg-blue-50 rounded-md text-sm">
+                <strong>Search Parameters:</strong>
+                <div id="searchParamsContent" class="mt-1 text-gray-700"></div>
             </div>
         </div>
 
@@ -87,21 +169,19 @@
                 <table id="resultsTable" class="display" style="width:100%">
                     <thead>
                         <tr>
+                            <th>Potential Score</th>
                             <th>Title</th>
                             <th>Channel</th>
+                            <th>Channel Age (days)</th>
                             <th>Subs</th>
                             <th>Views</th>
                             <th>Likes</th>
-                            <th>Comments</th>
                             <th>Duration (min)</th>
                             <th>Upload Date</th>
-                            <th>Days Old</th>
                             <th>View Velocity</th>
                             <th>Engagement %</th>
                             <th>Competition</th>
-                            <th>Main Keyword</th>
                             <th>Niche</th>
-                            <th>Related Videos</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -117,10 +197,16 @@
         </div>
 
         <div class="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 class="font-semibold text-blue-800 mb-2">Legend:</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+            <h3 class="font-semibold text-blue-800 mb-2">Understanding the Results:</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                 <div><span class="inline-block w-4 h-4 bg-green-100 border border-green-400 mr-2"></span>High Engagement (>3%)</div>
                 <div><span class="inline-block w-4 h-4 bg-blue-100 border border-blue-400 mr-2"></span>Low Competition (<40)</div>
+                <div class="col-span-2">
+                    <strong>Potential Score:</strong> Shows channels with high views but low subscribers (best opportunities).
+                    <span class="text-green-700 font-bold">75+</span> = Excellent,
+                    <span class="text-blue-700 font-semibold">50-75</span> = Good,
+                    <span class="text-gray-700">Below 50</span> = Average
+                </div>
             </div>
         </div>
     </div>
@@ -128,29 +214,46 @@
     <script>
         let dataTable;
 
-        $('#analyzeBtn').click(function() {
-            const urls = $('#urlInput').val().trim();
-            const urlList = urls ? urls.split('\n').filter(u => u.trim()) : [];
+        $('#searchBtn').click(function() {
+            const keyword = $('#keywordInput').val().trim();
+            
+            if (!keyword) {
+                alert('Please enter a keyword or niche to search for');
+                return;
+            }
+            
+            const videoDuration = $('#videoDuration').val();
+            const minSubs = parseInt($('#minSubs').val()) || 0;
+            const maxSubs = parseInt($('#maxSubs').val()) || 1000000;
+            const minViews = parseInt($('#minViews').val()) || 0;
+            const maxViews = parseInt($('#maxViews').val()) || 999999999;
+            const maxChannelAge = $('#maxChannelAge').val() ? parseInt($('#maxChannelAge').val()) : null;
+            const maxResults = parseInt($('#maxResults').val()) || 50;
             
             $('#loadingIndicator').removeClass('hidden');
-            $('#analyzeBtn').prop('disabled', true);
+            $('#searchBtn').prop('disabled', true);
             $('#errorMessage').addClass('hidden');
-            
-            const requestData = urlList.length > 0 ? { urls: urlList } : {};
-            const method = urlList.length > 0 ? 'POST' : 'GET';
+            $('#searchParams').addClass('hidden');
             
             $.ajax({
-                url: '/analyze',
-                method: method,
+                url: '/search',
+                method: 'POST',
                 contentType: 'application/json',
-                data: method === 'POST' ? JSON.stringify(requestData) : undefined,
+                data: JSON.stringify({
+                    keyword: keyword,
+                    video_duration: videoDuration,
+                    min_subs: minSubs,
+                    max_subs: maxSubs,
+                    min_views: minViews,
+                    max_views: maxViews,
+                    max_channel_age_days: maxChannelAge,
+                    max_results: maxResults
+                }),
                 success: function(response) {
                     if (response.success) {
                         displayResults(response.data);
                         updateStats(response.data);
-                        if (response.niche_analysis && response.niche_analysis.length > 0) {
-                            displayNicheAnalysis(response.niche_analysis, response.total_channel_videos);
-                        }
+                        displaySearchParams(response.search_params);
                         $('#exportBtn').prop('disabled', false);
                     }
                 },
@@ -161,7 +264,7 @@
                 },
                 complete: function() {
                     $('#loadingIndicator').addClass('hidden');
-                    $('#analyzeBtn').prop('disabled', false);
+                    $('#searchBtn').prop('disabled', false);
                 }
             });
         });
@@ -186,11 +289,16 @@
             tableBody.empty();
 
             data.forEach(function(row) {
-                const relatedVideos = row.related_videos.map(v => 
-                    `<div class="text-xs mb-1">• ${v.title}</div>`
-                ).join('');
-
                 const tr = $('<tr></tr>');
+                
+                const potentialScore = row.potential_score || 0;
+                let potentialClass = 'text-gray-700';
+                if (potentialScore >= 75) {
+                    potentialClass = 'text-green-700 font-bold';
+                    tr.addClass('high-engagement');
+                } else if (potentialScore >= 50) {
+                    potentialClass = 'text-blue-700 font-semibold';
+                }
                 
                 if (row.engagement_pct > 3) {
                     tr.addClass('high-engagement');
@@ -200,21 +308,19 @@
                 }
 
                 tr.append(`
+                    <td><span class="${potentialClass}">${potentialScore.toFixed(1)}</span></td>
                     <td><a href="https://youtube.com/watch?v=${row.video_id}" target="_blank" class="text-blue-600 hover:underline">${row.title}</a></td>
-                    <td>${row.channel}</td>
+                    <td><a href="https://youtube.com/channel/${row.channel_id}" target="_blank" class="text-blue-600 hover:underline">${row.channel}</a></td>
+                    <td>${row.channel_age_days !== null && row.channel_age_days !== undefined ? row.channel_age_days.toLocaleString() : 'N/A'}</td>
                     <td>${row.channel_subs.toLocaleString()}</td>
                     <td>${row.views.toLocaleString()}</td>
                     <td>${row.likes.toLocaleString()}</td>
-                    <td>${row.comments.toLocaleString()}</td>
                     <td>${row.duration_min}</td>
                     <td>${row.upload_date}</td>
-                    <td>${row.days_since_upload}</td>
                     <td>${row.view_velocity.toLocaleString()}</td>
                     <td>${row.engagement_pct}%</td>
                     <td>${row.competition_score}</td>
-                    <td>${row.main_keyword}</td>
                     <td>${row.niche}</td>
-                    <td><div class="max-w-xs">${relatedVideos || 'None'}</div></td>
                 `);
 
                 tableBody.append(tr);
@@ -222,11 +328,25 @@
 
             dataTable = $('#resultsTable').DataTable({
                 pageLength: 25,
-                order: [[10, 'desc']],
+                order: [[0, 'desc']],
                 columnDefs: [
-                    { type: 'num', targets: [2, 3, 4, 5, 6, 8, 9, 10, 11] }
+                    { type: 'num', targets: [0, 3, 4, 5, 6, 7, 9, 10, 11] }
                 ]
             });
+        }
+
+        function displaySearchParams(params) {
+            $('#searchParams').removeClass('hidden');
+            let content = `
+                <div><strong>Keyword:</strong> ${params.keyword}</div>
+                <div><strong>Video Duration:</strong> ${params.video_duration}</div>
+                <div><strong>Subscribers:</strong> ${params.subs_range}</div>
+                <div><strong>Views:</strong> ${params.views_range}</div>
+            `;
+            if (params.max_channel_age_days) {
+                content += `<div><strong>Max Channel Age:</strong> ${params.max_channel_age_days} days</div>`;
+            }
+            $('#searchParamsContent').html(content);
         }
 
         function updateStats(data) {
