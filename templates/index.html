@@ -14,9 +14,16 @@
 </head>
 <body class="bg-gray-50">
     <div class="container mx-auto px-4 py-8">
-        <div class="mb-8">
-            <h1 class="text-4xl font-bold text-gray-800 mb-2">YouTube Niche Analysis Dashboard</h1>
-            <p class="text-gray-600">Analyze YouTube videos to identify high-engagement, low-competition niches</p>
+        <div class="mb-8 bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h1 class="text-4xl font-bold text-gray-800 mb-2">YouTube Niche Analysis Dashboard</h1>
+                    <p class="text-gray-600">Analyze YouTube videos to identify high-engagement, low-competition niches</p>
+                </div>
+                <div id="accountInfo" class="text-right min-w-[200px]">
+                    <div class="text-sm text-gray-500">Loading account...</div>
+                </div>
+            </div>
         </div>
 
         <div class="bg-white rounded-lg shadow-md p-6 mb-8">
@@ -464,6 +471,58 @@
                 nicheList.append(nicheCard);
             });
         }
+
+        function loadAccountInfo() {
+            $.get('/api/account/info', function(response) {
+                if (response.success && response.account) {
+                    const account = response.account;
+                    const accountHtml = `
+                        <div class="flex items-center gap-3">
+                            ${account.thumbnail ? `<img src="${account.thumbnail}" class="w-10 h-10 rounded-full">` : ''}
+                            <div class="text-left">
+                                <div class="text-sm font-semibold text-gray-800">${account.channel_name}</div>
+                                <div class="text-xs text-gray-500">${account.subscriber_count !== 'Hidden' ? account.subscriber_count + ' subscribers' : 'Connected'}</div>
+                                <button 
+                                    onclick="disconnectAccount()" 
+                                    class="text-xs text-blue-600 hover:text-blue-800 underline mt-1">
+                                    Switch Account
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    $('#accountInfo').html(accountHtml);
+                }
+            }).fail(function() {
+                $('#accountInfo').html('<div class="text-sm text-red-500">Account not loaded</div>');
+            });
+        }
+
+        function disconnectAccount() {
+            if (!confirm('Are you sure you want to disconnect your YouTube account? You will need to reconnect on your next search.')) {
+                return;
+            }
+
+            $.ajax({
+                url: '/api/account/disconnect',
+                method: 'POST',
+                success: function(response) {
+                    if (response.success) {
+                        alert(response.message);
+                        $('#accountInfo').html('<div class="text-sm text-green-600">Account disconnected. Reconnect on next search.</div>');
+                    } else {
+                        alert('Error: ' + (response.error || 'Unknown error'));
+                    }
+                },
+                error: function(xhr) {
+                    const error = xhr.responseJSON?.error || 'Failed to disconnect account';
+                    alert('Error: ' + error);
+                }
+            });
+        }
+
+        $(document).ready(function() {
+            loadAccountInfo();
+        });
     </script>
 </body>
 </html>

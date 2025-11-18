@@ -17,40 +17,54 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
 
 CACHE_FILE = 'data/cache.json'
 
+def get_replit_connector_headers():
+    """Get headers for Replit connector API calls"""
+    repl_identity = os.getenv('REPL_IDENTITY')
+    web_repl_renewal = os.getenv('WEB_REPL_RENEWAL')
+    
+    x_replit_token = None
+    if repl_identity:
+        x_replit_token = 'repl ' + repl_identity
+    elif web_repl_renewal:
+        x_replit_token = 'depl ' + web_repl_renewal
+    
+    if not x_replit_token:
+        raise Exception("Replit environment not configured")
+    
+    return {
+        'Accept': 'application/json',
+        'X_REPLIT_TOKEN': x_replit_token
+    }
+
+def get_youtube_connection_info():
+    """Get YouTube connection info and settings"""
+    hostname = os.getenv('REPLIT_CONNECTORS_HOSTNAME')
+    if not hostname:
+        raise Exception("Replit environment not configured")
+    
+    headers = get_replit_connector_headers()
+    response = requests.get(
+        f'https://{hostname}/api/v2/connection?include_secrets=true&connector_names=youtube',
+        headers=headers
+    )
+    
+    if response.status_code != 200:
+        raise Exception(f"Failed to connect to YouTube connector: HTTP {response.status_code}")
+    
+    connection_data = response.json()
+    if not connection_data.get('items'):
+        return None
+    
+    return connection_data['items'][0]
+
 def get_youtube_client():
     """Get authenticated YouTube client using Replit integration"""
     try:
-        hostname = os.getenv('REPLIT_CONNECTORS_HOSTNAME')
-        x_replit_token = None
+        connection_settings = get_youtube_connection_info()
         
-        repl_identity = os.getenv('REPL_IDENTITY')
-        web_repl_renewal = os.getenv('WEB_REPL_RENEWAL')
-        
-        if repl_identity:
-            x_replit_token = 'repl ' + repl_identity
-        elif web_repl_renewal:
-            x_replit_token = 'depl ' + web_repl_renewal
-        
-        if not x_replit_token or not hostname:
-            raise Exception("Replit environment not configured")
-        
-        print(f"Connecting to YouTube via Replit connector...")
-        response = requests.get(
-            f'https://{hostname}/api/v2/connection?include_secrets=true&connector_names=youtube',
-            headers={
-                'Accept': 'application/json',
-                'X_REPLIT_TOKEN': x_replit_token
-            }
-        )
-        
-        if response.status_code != 200:
-            raise Exception(f"Failed to connect to YouTube connector: HTTP {response.status_code}")
-        
-        connection_data = response.json()
-        if not connection_data.get('items'):
+        if not connection_settings:
             raise Exception("YouTube not connected. Please set up the YouTube integration.")
         
-        connection_settings = connection_data['items'][0]
         print(f"YouTube connector status: {connection_settings.get('status', 'unknown')}")
         
         settings = connection_settings.get('settings', {})
@@ -813,6 +827,111 @@ def export_all_videos_csv():
         return send_file('data/all_channel_videos.csv', as_attachment=True, download_name='all_channel_videos.csv')
     except Exception as e:
         return jsonify({'error': str(e)}), 404
+
+@app.route('/api/account/info')
+def get_account_info():
+    """Get current YouTube account connection status"""
+    try:
+        connection_info = get_youtube_connection_info()
+        
+        if not connection_info:
+            return jsonify({
+                'success': False,
+                'connected': False,
+                'error': 'No YouTube connection found'
+            }), 404
+        
+        status = connection_info.get('status', 'unknown')
+        
+        try:
+            youtube = get_youtube_client()
+            
+            response = youtube.channels().list(
+                part='snippet,statistics',
+                mine=True
+            ).execute()
+            
+            if response.get('items'):
+                channel = response['items'][0]
+                return jsonify({
+                    'success': True,
+                    'connected': True,
+                    'account': {
+                        'channel_name': channel['snippet']['title'],
+                        'channel_id': channel['id'],
+                        'subscriber_count': channel['statistics'].get('subscriberCount', 'Hidden'),
+                        'thumbnail': channel['snippet']['thumbnails'].get('default', {}).get('url', '')
+                    }
+                })
+        except Exception as api_error:
+            error_str = str(api_error)
+            if 'quotaExceeded' in error_str or '403' in error_str:
+                return jsonify({
+                    'success': True,
+                    'connected': True,
+                    'quota_exceeded': True,
+                    'account': {
+                        'channel_name': 'YouTube Connected',
+                        'channel_id': None,
+                        'subscriber_count': 'Quota exceeded',
+                        'thumbnail': ''
+                    }
+                })
+        
+        return jsonify({
+            'success': True,
+            'connected': True,
+            'account': {
+                'channel_name': 'YouTube Connected',
+                'channel_id': None,
+                'subscriber_count': status,
+                'thumbnail': ''
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'connected': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/account/disconnect', methods=['POST'])
+def disconnect_account():
+    """Disconnect YouTube account to allow reconnection with different account"""
+    try:
+        hostname = os.getenv('REPLIT_CONNECTORS_HOSTNAME')
+        if not hostname:
+            return jsonify({'error': 'Replit environment not configured'}), 500
+        
+        connection_info = get_youtube_connection_info()
+        if not connection_info:
+            return jsonify({'error': 'No YouTube connection found'}), 404
+        
+        connection_id = connection_info.get('id')
+        if not connection_id:
+            return jsonify({'error': 'Connection ID not found'}), 500
+        
+        headers = get_replit_connector_headers()
+        
+        delete_response = requests.delete(
+            f'https://{hostname}/api/v2/connection/{connection_id}',
+            headers=headers
+        )
+        
+        if delete_response.status_code in [200, 204]:
+            return jsonify({
+                'success': True,
+                'message': 'YouTube account disconnected successfully. You will be prompted to reconnect on the next search.'
+            })
+        else:
+            return jsonify({
+                'error': f'Failed to disconnect: HTTP {delete_response.status_code}'
+            }), 500
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
