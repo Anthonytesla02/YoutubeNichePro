@@ -28,7 +28,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "uv run python app.py"
+args = "gunicorn --bind 0.0.0.0:5000 --reuse-port --reload main:app"
 waitForPort = 5000
 
 [[ports]]
@@ -38,6 +38,10 @@ externalPort = 5000
 [[ports]]
 localPort = 37803
 externalPort = 3000
+
+[[ports]]
+localPort = 43451
+externalPort = 3001
 
 [[ports]]
 localPort = 46317
