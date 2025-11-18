@@ -4,18 +4,20 @@
 A comprehensive Flask-based web application that analyzes YouTube videos to identify high-engagement, low-competition niches. The application fetches video statistics via YouTube Data API v3, calculates engagement metrics, competition scores, and displays results in an interactive sortable dashboard.
 
 **Status**: ✅ Fully Functional  
-**Last Updated**: October 14, 2025
+**Last Updated**: November 18, 2025
 
 ## Features
 - 🔐 **Secure Authentication**: Uses Replit YouTube connector for OAuth-based API authentication
-- 📊 **Comprehensive Analytics**: Fetches video stats (views, likes, comments, duration, upload date)
-- 🎯 **Niche Identification**: Clusters videos by keywords and identifies low-competition opportunities
+- 🤖 **Automated Niche Discovery**: Search YouTube by keyword/niche with advanced filtering - no manual URL input needed!
+- 🎯 **Smart Filtering System**: Filter by video length (shorts/medium/long), subscriber range, view count, and channel age
+- 🏅 **Potential Score Algorithm**: Identifies high-opportunity channels (high views but low subscribers)
+- 📊 **Comprehensive Analytics**: Fetches video stats (views, likes, comments, duration, upload date, channel age)
 - 📈 **Engagement Metrics**: Calculates engagement percentage, view velocity, and competition scores
-- 🔍 **Related Videos**: Discovers top competitor videos for each analyzed video
+- 🔍 **Channel Discovery**: Find smaller channels (e.g., <100k subs) with high engagement and viral potential
 - 🏆 **Channel-Wide Analysis**: Analyzes ALL videos from each discovered channel (up to 50 per channel)
 - 🎭 **Niche Competitor Analysis**: Identifies top-performing competitors in each niche with detailed stats
 - 💾 **API Quota Preservation**: Caches API responses locally to minimize quota usage
-- 📥 **Multiple CSV Exports**: Download seed videos, niche analysis, or all channel videos separately
+- 📥 **CSV Export**: Download search results as CSV for further analysis
 - 🎨 **Interactive UI**: Clean dashboard with DataTables, sorting, search, and visual indicators
 
 ## Project Structure
@@ -65,30 +67,32 @@ If the connector isn't available, set `YOUTUBE_API_KEY` in your environment vari
 
 ## How to Use
 
-### 1. Run Analysis
+### 1. Automated Search (Primary Method)
 1. Open the dashboard (automatically loads at http://localhost:5000)
-2. Leave the text area empty to analyze the default 13 seed videos, OR
-3. Paste custom YouTube video URLs (one per line)
-4. Click "Run Analysis"
+2. Enter a keyword or niche (e.g., "cooking tips", "fitness", "tech reviews")
+3. Configure your filters:
+   - **Video Length**: Choose Shorts (<4 min), Medium (4-20 min), Long (>20 min), or Any
+   - **Subscriber Range**: Set min/max to find smaller channels (default: 0-100k)
+   - **View Range**: Filter by video views (optional)
+   - **Max Channel Age**: Find newer channels (e.g., 365 days for 1 year old)
+   - **Max Results**: Number of videos to analyze (25-100)
+4. Click "🔍 Search for High-Potential Videos"
 
 ### 2. View Results
-The analysis displays:
-- **Green rows**: High engagement videos (>3% engagement rate)
-- **Blue rows**: Low competition niches (<40 competition score)
-- **Purple gradient**: Videos with both high engagement AND low competition
+The analysis displays videos sorted by **Potential Score** (high views + low subs = high opportunity):
+- **Green highlights**: Videos with 75+ potential score (excellent opportunities)
+- **Blue highlights**: Videos with 50-75 potential score (good opportunities)
+- **Channel Age**: Shows how old each channel is in days
+- Filter, sort, and search using the interactive table
 
-### 3. View Niche Competitor Analysis
-After analysis completes, scroll down to see:
-- Breakdown of videos by niche
-- Top 5 performing competitors in each niche
-- Channel stats including avg engagement and competition scores
-- Top 3 videos from each competitor channel
+### 3. Understanding Metrics
+- **Potential Score**: View-to-subscriber ratio - higher means more viral potential with less competition
+- **Engagement %**: (Likes + Comments) / Views × 100 - above 3% is excellent
+- **Competition Score**: Market saturation - below 40 indicates easier niches
+- **View Velocity**: Views per day - shows content momentum
 
 ### 4. Export Data
-Click "Export Data ▼" and choose from:
-- **Seed Videos CSV**: Original analyzed videos
-- **Niche Analysis CSV**: Competitor breakdown by niche
-- **All Videos CSV**: All videos from all discovered channels
+Click "Export Data ▼" to download search results as CSV for further analysis
 
 ## Metrics Explained
 
@@ -112,16 +116,42 @@ Weighted score (0-100) where:
 - Lower scores (<40) indicate easier niches to compete in
 - Higher scores suggest saturated markets
 
+### Potential Score
+```
+Potential Score = (Views / Subscribers) × 100 × Multiplier
+```
+Multiplier increases for channels with fewer subscribers:
+- Channels <10k subs: 1.5x multiplier
+- Channels 10k-50k subs: 1.2x multiplier
+- Channels >50k subs: 1.0x multiplier
+
+Higher scores (75+) indicate videos with exceptional viral potential relative to channel size - perfect opportunities for entering a niche.
+
 ### Niche Clustering
 Videos are grouped by extracting main keywords from titles, filtering stop words, and identifying common themes.
 
 ## API Endpoints
 
-### `GET /` or `POST /`
-Main dashboard page
+### `GET /`
+Main dashboard page with automated search interface
+
+### `POST /search`
+Automated YouTube search with advanced filters
+```json
+{
+  "keyword": "cooking tips",
+  "video_duration": "short",
+  "min_subs": 0,
+  "max_subs": 100000,
+  "min_views": 0,
+  "max_views": 999999999,
+  "max_channel_age_days": 365,
+  "max_results": 50
+}
+```
 
 ### `GET /analyze`
-Analyzes default seed videos from seeds.txt
+Legacy endpoint - analyzes default seed videos from seeds.txt
 
 ### `POST /analyze`
 Analyzes custom video URLs
@@ -207,6 +237,17 @@ https://www.youtube.com/watch?v=VIDEO_ID_2
 - Verify videos are public and accessible
 
 ## Recent Changes
+- **Nov 18, 2025 (v3.0)**: Automated niche discovery with advanced filtering
+  - Replaced manual URL input with keyword-based automated search
+  - Implemented YouTube search API integration with video duration filtering
+  - Added smart filtering: subscriber range, view range, channel age
+  - Created Potential Score algorithm to identify high-opportunity channels (high views/low subs)
+  - Added channel age tracking and display
+  - Updated UI with comprehensive filter controls and search parameters display
+  - Results now sorted by Potential Score (best opportunities first)
+  - Enhanced table with color-coded potential scores (green=excellent, blue=good)
+  - Updated caching system for search results and channel details
+
 - **Oct 14, 2025 (v2.0)**: Channel-wide analysis and niche competitor feature
   - Added channel-wide video analysis (up to 50 videos per channel)
   - Implemented niche competitor identification and ranking
