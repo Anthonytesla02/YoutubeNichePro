@@ -1,7 +1,7 @@
 import os
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import Counter
 import pandas as pd
 from flask import Flask, render_template, jsonify, request, send_file
@@ -65,9 +65,11 @@ def get_access_token():
     
     if (connection_settings_cache['data'] and 
         connection_settings_cache['expires_at'] and 
-        datetime.now() < connection_settings_cache['expires_at']):
+        datetime.now(timezone.utc) < connection_settings_cache['expires_at']):
+        print("Using cached access token")
         return connection_settings_cache['data'].get('settings', {}).get('access_token')
     
+    print("Fetching fresh access token from connector")
     connection_settings = get_youtube_connection_info()
     
     if not connection_settings:
@@ -85,9 +87,9 @@ def get_access_token():
             expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
             connection_settings_cache['expires_at'] = expires_at
         except:
-            connection_settings_cache['expires_at'] = datetime.now() + timedelta(hours=1)
+            connection_settings_cache['expires_at'] = datetime.now(timezone.utc) + timedelta(hours=1)
     else:
-        connection_settings_cache['expires_at'] = datetime.now() + timedelta(hours=1)
+        connection_settings_cache['expires_at'] = datetime.now(timezone.utc) + timedelta(hours=1)
     
     connection_settings_cache['data'] = connection_settings
     

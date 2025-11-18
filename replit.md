@@ -237,6 +237,15 @@ https://www.youtube.com/watch?v=VIDEO_ID_2
 - Verify videos are public and accessible
 
 ## Recent Changes
+- **Nov 18, 2025 (v3.1)**: Fixed YouTube connector integration and account switching
+  - Updated authentication to use Replit YouTube connector properly
+  - Implemented timezone-aware access token caching for improved performance
+  - Fixed account info display to show connected YouTube channel with thumbnail
+  - Added account disconnect/reconnect functionality for switching YouTube accounts
+  - Fixed connection status check to handle both 'connected' and 'healthy' statuses
+  - Added logging to track cache hits and token refreshes
+  - Verified all authentication flows work correctly with the new connector
+
 - **Nov 18, 2025 (v3.0)**: Automated niche discovery with advanced filtering
   - Replaced manual URL input with keyword-based automated search
   - Implemented YouTube search API integration with video duration filtering
