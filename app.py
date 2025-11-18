@@ -846,7 +846,7 @@ def get_account_info():
         
         status = connection_info.get('status', 'unknown')
         
-        if status != 'connected':
+        if status not in ['connected', 'healthy']:
             return jsonify({
                 'success': False,
                 'connected': False,
