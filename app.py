@@ -441,6 +441,8 @@ def identify_niche_competitors(all_results):
 
 def automated_search(youtube, keyword, video_duration='short', max_results=50):
     """Search YouTube for videos by keyword with duration filter"""
+    from googleapiclient.errors import HttpError
+    
     cache = load_cache()
     cache_key = f'search_{keyword}_{video_duration}_{max_results}'
     
@@ -476,9 +478,15 @@ def automated_search(youtube, keyword, video_duration='short', max_results=50):
         save_cache(cache)
         
         return video_ids
+    except HttpError as e:
+        error_message = str(e)
+        print(f"Error in automated search: {error_message}")
+        if 'quotaExceeded' in error_message or '403' in str(e.resp.status):
+            raise Exception("QUOTA_EXCEEDED")
+        raise e
     except Exception as e:
         print(f"Error in automated search: {e}")
-        return []
+        raise e
 
 def filter_by_channel_age(channel_data, max_age_days=None):
     """Filter channels by age"""
@@ -653,6 +661,15 @@ def search_niche():
     except Exception as e:
         import traceback
         traceback.print_exc()
+        
+        error_msg = str(e)
+        if 'QUOTA_EXCEEDED' in error_msg:
+            return jsonify({
+                'error': 'YouTube API Quota Exceeded',
+                'details': 'Your YouTube API quota has been exceeded. YouTube API has a daily limit of 10,000 units per day. Please try again tomorrow or increase your quota in the Google Cloud Console.',
+                'help_link': 'https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas'
+            }), 429
+        
         return jsonify({'error': str(e)}), 500
 
 @app.route('/analyze', methods=['GET', 'POST'])

@@ -258,8 +258,19 @@
                     }
                 },
                 error: function(xhr) {
-                    const error = xhr.responseJSON?.error || 'An error occurred';
-                    $('#errorText').text(error);
+                    const errorData = xhr.responseJSON || {};
+                    const error = errorData.error || 'An error occurred';
+                    let errorHtml = error;
+                    
+                    if (errorData.details) {
+                        errorHtml += '<br><br>' + errorData.details;
+                    }
+                    
+                    if (errorData.help_link) {
+                        errorHtml += '<br><br><a href="' + errorData.help_link + '" target="_blank" class="underline font-semibold">Click here to manage your YouTube API quota</a>';
+                    }
+                    
+                    $('#errorText').html(errorHtml);
                     $('#errorMessage').removeClass('hidden');
                 },
                 complete: function() {
