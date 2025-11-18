@@ -63,13 +63,21 @@ def get_youtube_connection_info():
     
     return connection_data['items'][0]
 
-def get_access_token():
-    """Get fresh access token, checking cache first"""
+def get_access_token(force_refresh=False):
+    """Get fresh access token, checking cache first
+    
+    Args:
+        force_refresh: If True, bypass cache and get fresh token
+    """
     global connection_settings_cache
     
-    if (connection_settings_cache['data'] and 
+    # Add 5 minute buffer before expiration to avoid edge cases
+    buffer_time = timedelta(minutes=5)
+    
+    if (not force_refresh and 
+        connection_settings_cache['data'] and 
         connection_settings_cache['expires_at'] and 
-        datetime.now(timezone.utc) < connection_settings_cache['expires_at']):
+        datetime.now(timezone.utc) < (connection_settings_cache['expires_at'] - buffer_time)):
         print("Using cached access token")
         return connection_settings_cache['data'].get('settings', {}).get('access_token')
     
@@ -91,9 +99,9 @@ def get_access_token():
             expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
             connection_settings_cache['expires_at'] = expires_at
         except:
-            connection_settings_cache['expires_at'] = datetime.now(timezone.utc) + timedelta(hours=1)
+            connection_settings_cache['expires_at'] = datetime.now(timezone.utc) + timedelta(minutes=30)
     else:
-        connection_settings_cache['expires_at'] = datetime.now(timezone.utc) + timedelta(hours=1)
+        connection_settings_cache['expires_at'] = datetime.now(timezone.utc) + timedelta(minutes=30)
     
     connection_settings_cache['data'] = connection_settings
     
@@ -817,7 +825,7 @@ def get_related(video_id):
 def export_csv():
     """Download results as CSV"""
     try:
-        return send_file('data/results.csv', as_attachment=True, download_name='youtube_analysis.csv')
+        return send_file('data/search_results.csv', as_attachment=True, download_name='youtube_analysis.csv')
     except Exception as e:
         return jsonify({'error': str(e)}), 404
 

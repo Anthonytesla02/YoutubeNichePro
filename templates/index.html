@@ -188,6 +188,7 @@
                 <table id="resultsTable" class="display" style="width:100%">
                     <thead>
                         <tr>
+                            <th>Play</th>
                             <th>Potential Score</th>
                             <th>Title</th>
                             <th>Channel</th>
@@ -230,8 +231,50 @@
         </div>
     </div>
 
+    <!-- Video Player Modal -->
+    <div id="videoModal" class="fixed inset-0 bg-black bg-opacity-75 hidden z-50 flex items-center justify-center p-4" onclick="closeVideoModal(event)">
+        <div class="bg-white rounded-lg max-w-4xl w-full p-6 relative" onclick="event.stopPropagation()">
+            <button onclick="closeVideoModal()" class="absolute top-4 right-4 text-gray-600 hover:text-gray-800 text-2xl font-bold">&times;</button>
+            <h3 id="videoModalTitle" class="text-xl font-semibold mb-4 pr-8"></h3>
+            <div class="aspect-video bg-gray-900 rounded">
+                <iframe id="videoPlayer" class="w-full h-full rounded" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+            </div>
+            <div id="videoInfo" class="mt-4 text-sm text-gray-600"></div>
+        </div>
+    </div>
+
     <script>
         let dataTable;
+        
+        function openVideoModal(videoId, title, channel, views, likes) {
+            $('#videoModal').removeClass('hidden');
+            $('#videoModalTitle').text(title);
+            $('#videoPlayer').attr('src', `https://www.youtube.com/embed/${videoId}?autoplay=1`);
+            $('#videoInfo').html(`
+                <div class="grid grid-cols-2 gap-4">
+                    <div><strong>Channel:</strong> ${channel}</div>
+                    <div><strong>Views:</strong> ${views.toLocaleString()}</div>
+                    <div><strong>Likes:</strong> ${likes.toLocaleString()}</div>
+                    <div><a href="https://youtube.com/watch?v=${videoId}" target="_blank" class="text-blue-600 hover:underline">Watch on YouTube →</a></div>
+                </div>
+            `);
+            $('body').addClass('overflow-hidden');
+        }
+        
+        function closeVideoModal(event) {
+            if (!event || event.target.id === 'videoModal' || !event) {
+                $('#videoModal').addClass('hidden');
+                $('#videoPlayer').attr('src', '');
+                $('body').removeClass('overflow-hidden');
+            }
+        }
+        
+        // Close modal with Escape key
+        $(document).keydown(function(e) {
+            if (e.key === 'Escape') {
+                closeVideoModal();
+            }
+        });
 
         $('#searchBtn').click(function() {
             const keyword = $('#keywordInput').val().trim();
@@ -337,17 +380,29 @@
                     tr.addClass('low-competition');
                 }
 
+                const views = Number(row.views || 0);
+                const likes = Number(row.likes || 0);
+                const channelSubs = Number(row.channel_subs || 0);
+                const viewVelocity = Number(row.view_velocity || 0);
+                const playButton = `<button onclick='openVideoModal("${row.video_id}", ${JSON.stringify(row.title)}, ${JSON.stringify(row.channel)}, ${views}, ${likes})' class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+                    </svg>
+                    Play
+                </button>`;
+                
                 tr.append(`
+                    <td>${playButton}</td>
                     <td><span class="${potentialClass}">${potentialScore.toFixed(1)}</span></td>
                     <td><a href="https://youtube.com/watch?v=${row.video_id}" target="_blank" class="text-blue-600 hover:underline">${row.title}</a></td>
                     <td><a href="https://youtube.com/channel/${row.channel_id}" target="_blank" class="text-blue-600 hover:underline">${row.channel}</a></td>
-                    <td>${row.channel_age_days !== null && row.channel_age_days !== undefined ? row.channel_age_days.toLocaleString() : 'N/A'}</td>
-                    <td>${row.channel_subs.toLocaleString()}</td>
-                    <td>${row.views.toLocaleString()}</td>
-                    <td>${row.likes.toLocaleString()}</td>
+                    <td>${row.channel_age_days !== null && row.channel_age_days !== undefined ? Number(row.channel_age_days).toLocaleString() : 'N/A'}</td>
+                    <td>${channelSubs.toLocaleString()}</td>
+                    <td>${views.toLocaleString()}</td>
+                    <td>${likes.toLocaleString()}</td>
                     <td>${row.duration_min}</td>
                     <td>${row.upload_date}</td>
-                    <td>${row.view_velocity.toLocaleString()}</td>
+                    <td>${viewVelocity.toLocaleString()}</td>
                     <td>${row.engagement_pct}%</td>
                     <td>${row.competition_score}</td>
                     <td>${row.niche}</td>
@@ -358,9 +413,10 @@
 
             dataTable = $('#resultsTable').DataTable({
                 pageLength: 25,
-                order: [[0, 'desc']],
+                order: [[1, 'desc']],
                 columnDefs: [
-                    { type: 'num', targets: [0, 3, 4, 5, 6, 7, 9, 10, 11] }
+                    { orderable: false, targets: 0 },
+                    { type: 'num', targets: [1, 4, 5, 6, 7, 8, 10, 11, 12] }
                 ]
             });
         }
