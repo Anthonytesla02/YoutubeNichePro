@@ -17,6 +17,8 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
 
 CACHE_FILE = 'data/cache.json'
 
+connection_settings_cache = {'data': None, 'expires_at': None}
+
 def get_replit_connector_headers():
     """Get headers for Replit connector API calls"""
     repl_identity = os.getenv('REPL_IDENTITY')
@@ -57,52 +59,53 @@ def get_youtube_connection_info():
     
     return connection_data['items'][0]
 
+def get_access_token():
+    """Get fresh access token, checking cache first"""
+    global connection_settings_cache
+    
+    if (connection_settings_cache['data'] and 
+        connection_settings_cache['expires_at'] and 
+        datetime.now() < connection_settings_cache['expires_at']):
+        return connection_settings_cache['data'].get('settings', {}).get('access_token')
+    
+    connection_settings = get_youtube_connection_info()
+    
+    if not connection_settings:
+        raise Exception("YouTube not connected. Please set up the YouTube integration.")
+    
+    settings = connection_settings.get('settings', {})
+    access_token = settings.get('access_token')
+    
+    if not access_token:
+        raise Exception("No access token found in connector settings")
+    
+    expires_at_str = settings.get('expires_at')
+    if expires_at_str:
+        try:
+            expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+            connection_settings_cache['expires_at'] = expires_at
+        except:
+            connection_settings_cache['expires_at'] = datetime.now() + timedelta(hours=1)
+    else:
+        connection_settings_cache['expires_at'] = datetime.now() + timedelta(hours=1)
+    
+    connection_settings_cache['data'] = connection_settings
+    
+    return access_token
+
 def get_youtube_client():
-    """Get authenticated YouTube client using Replit integration"""
+    """Get authenticated YouTube client using Replit integration
+    
+    WARNING: Never cache this client.
+    Access tokens expire, so a new client must be created each time.
+    Always call this function again to get a fresh client.
+    """
     try:
-        connection_settings = get_youtube_connection_info()
-        
-        if not connection_settings:
-            raise Exception("YouTube not connected. Please set up the YouTube integration.")
-        
-        print(f"YouTube connector status: {connection_settings.get('status', 'unknown')}")
-        
-        settings = connection_settings.get('settings', {})
-        access_token = settings.get('access_token')
-        
-        if not access_token:
-            oauth_data = settings.get('oauth', {})
-            credentials_data = oauth_data.get('credentials', {})
-            access_token = credentials_data.get('access_token')
-            refresh_token = credentials_data.get('refresh_token')
-            client_id = credentials_data.get('client_id')
-            expires_at = credentials_data.get('expires_at')
-        else:
-            refresh_token = settings.get('refresh_token')
-            oauth_data = settings.get('oauth', {})
-            credentials_data = oauth_data.get('credentials', {})
-            client_id = credentials_data.get('client_id')
-            expires_at = settings.get('expires_at')
-        
-        if not access_token:
-            raise Exception("No access token found in connector settings")
+        access_token = get_access_token()
         
         print(f"Successfully retrieved access token")
         
-        expiry = None
-        if expires_at:
-            try:
-                expiry = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
-            except:
-                pass
-        
-        credentials = Credentials(
-            token=access_token,
-            refresh_token=refresh_token,
-            token_uri='https://oauth2.googleapis.com/token',
-            client_id=client_id,
-            client_secret=None
-        )
+        credentials = Credentials(token=access_token)
         
         youtube = build('youtube', 'v3', credentials=credentials)
         print("YouTube client created successfully")
@@ -899,6 +902,8 @@ def get_account_info():
 def disconnect_account():
     """Disconnect YouTube account to allow reconnection with different account"""
     try:
+        global connection_settings_cache
+        
         hostname = os.getenv('REPLIT_CONNECTORS_HOSTNAME')
         if not hostname:
             return jsonify({'error': 'Replit environment not configured'}), 500
@@ -919,6 +924,8 @@ def disconnect_account():
         )
         
         if delete_response.status_code in [200, 204]:
+            connection_settings_cache = {'data': None, 'expires_at': None}
+            
             return jsonify({
                 'success': True,
                 'message': 'YouTube account disconnected successfully. You will be prompted to reconnect on the next search.'
