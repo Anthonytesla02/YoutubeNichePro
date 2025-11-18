@@ -846,6 +846,13 @@ def get_account_info():
         
         status = connection_info.get('status', 'unknown')
         
+        if status != 'connected':
+            return jsonify({
+                'success': False,
+                'connected': False,
+                'error': f'YouTube connection status: {status}'
+            }), 404
+        
         try:
             youtube = get_youtube_client()
             
@@ -856,18 +863,29 @@ def get_account_info():
             
             if response.get('items'):
                 channel = response['items'][0]
+                subscriber_count = channel['statistics'].get('subscriberCount', 'Hidden')
+                if subscriber_count != 'Hidden':
+                    subscriber_count = int(subscriber_count)
+                    if subscriber_count >= 1000000:
+                        subscriber_count = f'{subscriber_count/1000000:.1f}M'
+                    elif subscriber_count >= 1000:
+                        subscriber_count = f'{subscriber_count/1000:.1f}K'
+                    else:
+                        subscriber_count = str(subscriber_count)
+                
                 return jsonify({
                     'success': True,
                     'connected': True,
                     'account': {
                         'channel_name': channel['snippet']['title'],
                         'channel_id': channel['id'],
-                        'subscriber_count': channel['statistics'].get('subscriberCount', 'Hidden'),
+                        'subscriber_count': subscriber_count,
                         'thumbnail': channel['snippet']['thumbnails'].get('default', {}).get('url', '')
                     }
                 })
         except Exception as api_error:
             error_str = str(api_error)
+            print(f"Error getting account info: {api_error}")
             if 'quotaExceeded' in error_str or '403' in error_str:
                 return jsonify({
                     'success': True,
@@ -892,6 +910,9 @@ def get_account_info():
             }
         })
     except Exception as e:
+        print(f"Error in get_account_info: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'connected': False,
