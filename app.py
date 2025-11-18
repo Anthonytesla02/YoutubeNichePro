@@ -129,7 +129,7 @@ def save_cache(cache):
         json.dump(cache, f, indent=2)
 
 def get_video_details(youtube, video_ids):
-    """Fetch video details from YouTube API"""
+    """Fetch video details from YouTube API with efficient batching (1 unit per video)"""
     cache = load_cache()
     results = []
     uncached_ids = []
@@ -142,29 +142,35 @@ def get_video_details(youtube, video_ids):
     
     if uncached_ids:
         try:
-            response = youtube.videos().list(
-                part='snippet,statistics,contentDetails',
-                id=','.join(uncached_ids)
-            ).execute()
-            
-            for item in response.get('items', []):
-                video_data = {
-                    'video_id': item['id'],
-                    'title': item['snippet']['title'],
-                    'channel_id': item['snippet']['channelId'],
-                    'channel_title': item['snippet']['channelTitle'],
-                    'upload_date': item['snippet']['publishedAt'],
-                    'views': int(item['statistics'].get('viewCount', 0)),
-                    'likes': int(item['statistics'].get('likeCount', 0)),
-                    'comments': int(item['statistics'].get('commentCount', 0)),
-                    'duration': item['contentDetails']['duration'],
-                    'tags': item['snippet'].get('tags', [])
-                }
-                results.append(video_data)
+            # Batch requests: YouTube API allows up to 50 IDs per request
+            # Cost: 1 quota unit per request
+            for i in range(0, len(uncached_ids), 50):
+                batch = uncached_ids[i:i+50]
+                print(f"Fetching details for {len(batch)} videos (1 quota unit)")
                 
-                if 'videos' not in cache:
-                    cache['videos'] = {}
-                cache['videos'][item['id']] = video_data
+                response = youtube.videos().list(
+                    part='snippet,statistics,contentDetails',
+                    id=','.join(batch)
+                ).execute()
+                
+                for item in response.get('items', []):
+                    video_data = {
+                        'video_id': item['id'],
+                        'title': item['snippet']['title'],
+                        'channel_id': item['snippet']['channelId'],
+                        'channel_title': item['snippet']['channelTitle'],
+                        'upload_date': item['snippet']['publishedAt'],
+                        'views': int(item['statistics'].get('viewCount', 0)),
+                        'likes': int(item['statistics'].get('likeCount', 0)),
+                        'comments': int(item['statistics'].get('commentCount', 0)),
+                        'duration': item['contentDetails']['duration'],
+                        'tags': item['snippet'].get('tags', [])
+                    }
+                    results.append(video_data)
+                    
+                    if 'videos' not in cache:
+                        cache['videos'] = {}
+                    cache['videos'][item['id']] = video_data
             
             save_cache(cache)
         except Exception as e:
@@ -439,27 +445,37 @@ def identify_niche_competitors(all_results):
     
     return niche_data
 
-def automated_search(youtube, keyword, video_duration='short', max_results=50):
-    """Search YouTube for videos by keyword with duration filter"""
+def automated_search(youtube, keyword, video_duration='short', max_results=20):
+    """Search YouTube for videos by keyword with duration filter
+    COST: 100 quota units per search API call
+    Default max_results=20 to minimize quota usage (fits in 1 call)
+    """
     from googleapiclient.errors import HttpError
     
     cache = load_cache()
     cache_key = f'search_{keyword}_{video_duration}_{max_results}'
     
+    # Check cache first - saves 100 units!
     if cache_key in cache.get('searches', {}):
+        print(f"Using cached search results for '{keyword}' (saved 100 quota units)")
         return cache['searches'][cache_key]
     
     try:
         video_ids = []
         next_page_token = None
+        api_calls = 0
         
         while len(video_ids) < max_results:
+            api_calls += 1
+            batch_size = min(50, max_results - len(video_ids))
+            print(f"Search API call #{api_calls} for '{keyword}' - fetching {batch_size} results (100 quota units)")
+            
             response = youtube.search().list(
                 part='id',
                 q=keyword,
                 type='video',
                 videoDuration=video_duration,
-                maxResults=min(50, max_results - len(video_ids)),
+                maxResults=batch_size,
                 order='viewCount',
                 pageToken=next_page_token
             ).execute()
@@ -471,6 +487,8 @@ def automated_search(youtube, keyword, video_duration='short', max_results=50):
             next_page_token = response.get('nextPageToken')
             if not next_page_token or len(video_ids) >= max_results:
                 break
+        
+        print(f"Search complete: Found {len(video_ids)} videos using {api_calls * 100} quota units")
         
         if 'searches' not in cache:
             cache['searches'] = {}
@@ -505,7 +523,7 @@ def filter_by_channel_age(channel_data, max_age_days=None):
         return True
 
 def get_channel_details(youtube, channel_ids):
-    """Fetch channel details including creation date"""
+    """Fetch channel details including creation date with efficient batching (1 unit per 50 channels)"""
     cache = load_cache()
     results = {}
     uncached_ids = []
@@ -519,25 +537,31 @@ def get_channel_details(youtube, channel_ids):
     
     if uncached_ids:
         try:
-            response = youtube.channels().list(
-                part='snippet,statistics',
-                id=','.join(uncached_ids)
-            ).execute()
-            
-            for item in response.get('items', []):
-                channel_data = {
-                    'channel_id': item['id'],
-                    'title': item['snippet']['title'],
-                    'published_at': item['snippet']['publishedAt'],
-                    'subscriber_count': int(item['statistics'].get('subscriberCount', 0)),
-                    'video_count': int(item['statistics'].get('videoCount', 0)),
-                    'view_count': int(item['statistics'].get('viewCount', 0))
-                }
-                results[item['id']] = channel_data
+            # Batch requests: up to 50 channel IDs per request
+            # Cost: 1 quota unit per request
+            for i in range(0, len(uncached_ids), 50):
+                batch = uncached_ids[i:i+50]
+                print(f"Fetching details for {len(batch)} channels (1 quota unit)")
                 
-                if 'channel_details' not in cache:
-                    cache['channel_details'] = {}
-                cache['channel_details'][f'channel_details_{item["id"]}'] = channel_data
+                response = youtube.channels().list(
+                    part='snippet,statistics',
+                    id=','.join(batch)
+                ).execute()
+                
+                for item in response.get('items', []):
+                    channel_data = {
+                        'channel_id': item['id'],
+                        'title': item['snippet']['title'],
+                        'published_at': item['snippet']['publishedAt'],
+                        'subscriber_count': int(item['statistics'].get('subscriberCount', 0)),
+                        'video_count': int(item['statistics'].get('videoCount', 0)),
+                        'view_count': int(item['statistics'].get('viewCount', 0))
+                    }
+                    results[item['id']] = channel_data
+                    
+                    if 'channel_details' not in cache:
+                        cache['channel_details'] = {}
+                    cache['channel_details'][f'channel_details_{item["id"]}'] = channel_data
             
             save_cache(cache)
         except Exception as e:
@@ -585,7 +609,7 @@ def search_niche():
         min_views = data.get('min_views', 0)
         max_views = data.get('max_views', 999999999)
         max_channel_age_days = data.get('max_channel_age_days')
-        max_results = min(data.get('max_results', 50), 100)
+        max_results = min(data.get('max_results', 20), 100)  # Default 20 for efficiency
         
         youtube = get_youtube_client()
         
