@@ -1,4 +1,4 @@
-modules = ["python-3.11", "web"]
+modules = ["python-3.11", "web", "nodejs-20"]
 [agent]
 expertMode = true
 integrations = ["youtube:1.0.0"]

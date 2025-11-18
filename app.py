@@ -34,6 +34,7 @@ def get_youtube_client():
         if not x_replit_token or not hostname:
             raise Exception("Replit environment not configured")
         
+        print(f"Connecting to YouTube via Replit connector...")
         response = requests.get(
             f'https://{hostname}/api/v2/connection?include_secrets=true&connector_names=youtube',
             headers={
@@ -42,25 +43,37 @@ def get_youtube_client():
             }
         )
         
+        if response.status_code != 200:
+            raise Exception(f"Failed to connect to YouTube connector: HTTP {response.status_code}")
+        
         connection_data = response.json()
         if not connection_data.get('items'):
             raise Exception("YouTube not connected. Please set up the YouTube integration.")
         
         connection_settings = connection_data['items'][0]
+        print(f"YouTube connector status: {connection_settings.get('status', 'unknown')}")
         
-        access_token = connection_settings.get('settings', {}).get('access_token')
-        refresh_token = connection_settings.get('settings', {}).get('refresh_token')
-        expires_at = connection_settings.get('settings', {}).get('expires_at')
+        settings = connection_settings.get('settings', {})
+        access_token = settings.get('access_token')
         
         if not access_token:
-            oauth_data = connection_settings.get('settings', {}).get('oauth', {})
+            oauth_data = settings.get('oauth', {})
             credentials_data = oauth_data.get('credentials', {})
             access_token = credentials_data.get('access_token')
             refresh_token = credentials_data.get('refresh_token')
-            expires_at = oauth_data.get('expires_at')
+            client_id = credentials_data.get('client_id')
+            expires_at = credentials_data.get('expires_at')
+        else:
+            refresh_token = settings.get('refresh_token')
+            oauth_data = settings.get('oauth', {})
+            credentials_data = oauth_data.get('credentials', {})
+            client_id = credentials_data.get('client_id')
+            expires_at = settings.get('expires_at')
         
         if not access_token:
             raise Exception("No access token found in connector settings")
+        
+        print(f"Successfully retrieved access token")
         
         expiry = None
         if expires_at:
@@ -73,12 +86,12 @@ def get_youtube_client():
             token=access_token,
             refresh_token=refresh_token,
             token_uri='https://oauth2.googleapis.com/token',
-            client_id=connection_settings.get('settings', {}).get('oauth', {}).get('client_id'),
-            client_secret=connection_settings.get('settings', {}).get('oauth', {}).get('client_secret'),
-            expiry=expiry
+            client_id=client_id,
+            client_secret=None
         )
         
         youtube = build('youtube', 'v3', credentials=credentials)
+        print("YouTube client created successfully")
         return youtube
         
     except Exception as e:
